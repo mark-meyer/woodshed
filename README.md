@@ -1,2 +1,2 @@
 # woodshed
-Just a place to place to work on problems and explore
+These is primarily a personal scratch pad for working out small problems while reading. 
