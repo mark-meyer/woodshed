@@ -2,64 +2,66 @@ use std::cmp::Ordering::{Greater, Less, Equal};
 use std::fmt::Debug;
 
 #[derive(Debug)]
-pub struct BST<T> {
+pub struct BST<K, V> {
     /// Simple Balanced AVL Binary Search Tree
     /// Supports:
     /// - insert
     /// - find 
     /// - delete
-    root: Option<Box<BSTNode<T>>>
+    root: Option<Box<BSTNode<K, V>>>
 }
 
 #[derive(Debug)]
-struct BSTNode<T> {
-    key: T,
+struct BSTNode<K, V> {
+    key: K,
+    value: V,
     height: u8,
-    left: Option<Box<BSTNode<T>>>,
-    right: Option<Box<BSTNode<T>>>,
+    left: Option<Box<BSTNode<K, V>>>,
+    right: Option<Box<BSTNode<K, V>>>,
 }
 
-impl<T: Ord + Debug> BST<T>{
+impl<K: Ord + Debug, V> BST<K, V>{
     pub fn new()  -> Self  {
         Self {
             root: None,
         }
     }
 
-    pub fn insert(&mut self, key: T) {
+    pub fn insert(&mut self, key: K, value: V) {
         if let Some(node) = self.root.take() {
             // We take the root, let it transform itself, 
             // and catch whatever it returns.
-            self.root = Some(node.insert(key));
+            self.root = Some(node.insert(key, value));
         } else {
-            self.root = Some(Box::new(BSTNode::new(key)));
+            self.root = Some(Box::new(BSTNode::new(key, value)));
         }
     }
 
-    pub fn find(&self, key: &T) -> Option<&T> {
+    pub fn find(&self, key: &K) -> Option<&V> {
         // as_ref() converts Option<Box> to Option<&Box>
         self.root.as_ref().and_then(|n| n.find(key))
     }
 
 
-    pub fn delete(&mut self, key: &T) {
+    pub fn delete(&mut self, key: &K) {
         if let Some(root_node) = self.root.take() {
             self.root = root_node.delete(key);
         }
     }
 }
 
-impl<T: Ord + Debug> BSTNode<T> {
-    fn new(key: T) -> Self{
+impl<K: Ord + Debug, V> BSTNode<K, V> {
+    fn new(key: K, value: V) -> Self{
         BSTNode {
             key,
+            value,
             height: 1,
             left: None,
             right: None
         }
     }
     
-    fn get_height(node: &Option<Box<BSTNode<T>>>) -> u8 {
+    fn get_height(node: &Option<Box<Self>>) -> u8 {
         node.as_ref().map_or(0, |n| n.height)
     }
 
@@ -89,7 +91,7 @@ impl<T: Ord + Debug> BSTNode<T> {
             }
             self.rotate_left()
         } else {
-            self // No rotation needed
+            self
         }
     }
 
@@ -124,27 +126,27 @@ impl<T: Ord + Debug> BSTNode<T> {
         self.height = 1 + h_left.max(h_right);
     }
 
-    fn insert(mut self: Box<Self>, key: T) -> Box<Self>{
+    fn insert(mut self: Box<Self>, key: K, value: V) -> Box<Self>{
         match key.cmp(&self.key) {
             Less => {
                 if let Some(left) = self.left.take() {
-                    self.left = Some(left.insert(key))
+                    self.left = Some(left.insert(key, value))
                 } else {
-                    self.left = Some(Box::new(BSTNode::new(key)));
+                    self.left = Some(Box::new(BSTNode::new(key, value)));
                 }
             }, 
             Greater | Equal => {
                 if let Some(right) = self.right.take() {
-                    self.right = Some(right.insert(key));
+                    self.right = Some(right.insert(key, value));
                 } else {
-                    self.right = Some(Box::new(BSTNode::new(key)));
+                    self.right = Some(Box::new(BSTNode::new(key, value)));
                 }
             } 
         };
         self.rebalance()
     }
 
-    fn delete(mut self: Box<Self>, key: &T) -> Option<Box<Self>> {
+    fn delete(mut self: Box<Self>, key: &K) -> Option<Box<Self>> {
         // Take and return
         // takes ownership of node and returns the node
         // that should replace it
@@ -199,10 +201,10 @@ impl<T: Ord + Debug> BSTNode<T> {
         }
     }
 
-    fn find(&self, key: &T) -> Option<&T> {
+    fn find(&self, key: &K) -> Option<&V> {
         match key.cmp(&self.key) {
             Less => self.left.as_ref()?.find(key),
-            Equal => Some(&self.key),
+            Equal => Some(&self.value),
             Greater => self.right.as_ref()?.find(key)
         }
     }
@@ -217,7 +219,7 @@ mod tests {
     #[test]
     fn new() {
         let mut n = BST::new();
-        n.insert(100);
+        n.insert(100, 'a');
         assert_eq!(n.root.as_ref().unwrap().key, 100);
         assert!(n.root.as_ref().unwrap().left.is_none());
         assert!(n.root.as_ref().unwrap().right.is_none());
@@ -226,39 +228,39 @@ mod tests {
     #[test]
     fn insert() {
         let mut n = BST::new();
-        n.insert(100);
-        n.insert(99);
+        n.insert(100, "a");
+        n.insert(99, "b");
         assert!(n.root.as_ref().unwrap().left.as_ref().is_some_and(|n| n.key == 99));
         assert!(n.root.as_ref().unwrap().right.is_none());
 
-        n.insert(101);
+        n.insert(101, "c");
         assert!(n.root.as_ref().unwrap().right.as_ref().is_some_and(|n| n.key == 101));
     }
 
     #[test]
     fn find() {
         let mut n = BST::new();
-        n.insert(10);
-        n.insert(5);
-        n.insert(11);
-        n.insert(99);
-        n.insert(1);
+        n.insert(10, "ten");
+        n.insert(5, "five");
+        n.insert(11, "eleven");
+        n.insert(99, "ninety-nine");
+        n.insert(1, "one");
 
-        assert_eq!(n.find(&11), Some(&11));
-        assert_eq!(n.find(&1), Some(&1));
+        assert_eq!(n.find(&11).unwrap(), &"eleven");
+        assert_eq!(n.find(&1).unwrap(), &"one");
         assert_eq!(n.find(&2), None);    
     }
 
     #[test]
     fn delete_node() {
         let mut n = BST::new();
-        n.insert(10);
-        n.insert(5);
-        n.insert(15);
-        n.insert(11);
-        n.insert(20);
-        n.insert(1);
-        assert_eq!(n.find(&10), Some(&10));
+        n.insert(10, "10");
+        n.insert(5, "5");
+        n.insert(15, "15");
+        n.insert(11,"11");
+        n.insert(20, "20");
+        n.insert(1, "1");
+        assert_eq!(n.find(&10).unwrap(), &"10");
         n.delete(&10);
         assert_eq!(n.find(&10), None);
         // should be the min child of right tree
@@ -269,10 +271,10 @@ mod tests {
         // handle case where right child does not 
         // have left tree
         let mut n = BST::new();
-        n.insert(10);
-        n.insert(5);
-        n.insert(15);
-        n.insert(20);
+        n.insert(10, "10");
+        n.insert(5, "5");
+        n.insert(15, "15");
+        n.insert(20, "20");
         n.delete(&10);
         let root = n.root.as_ref().unwrap();
         assert_eq!(root.key, 15);
@@ -283,29 +285,29 @@ mod tests {
     #[test]
     fn height_insert() {
         let mut n = BST::new();
-        n.insert(10);
+        n.insert(10, "10");
 
         assert_eq!(&n.root.as_ref().unwrap().height, &1);
-        n.insert(5);
+        n.insert(5, "5");
         assert_eq!(&n.root.as_ref().unwrap().height, &2);
 
-        n.insert(2);
+        n.insert(2, "2");
         // rebalances
         assert_eq!(&n.root.as_ref().unwrap().height, &2);
         assert_eq!(&n.root.as_ref().unwrap().key, &5);
        
-        n.insert(12);
+        n.insert(12, "12");
         assert_eq!(&n.root.as_ref().unwrap().height, &3);
     }
 
     #[test]
     fn height_delete() {
         let mut n = BST::new();
-        n.insert(10);
-        n.insert(5);
-        n.insert(15);
-        n.insert(14);
-        n.insert(11);
+        n.insert(10, "10");
+        n.insert(5, "5");
+        n.insert(15, "15");
+        n.insert(14, "14");
+        n.insert(11, "11");
         assert_eq!(&n.root.as_ref().unwrap().height, &3);
         n.delete(&10);
         assert_eq!(&n.root.as_ref().unwrap().height, &3);
@@ -315,13 +317,29 @@ mod tests {
     #[test]
     fn balance_factor() {
         let mut n = BST::new();
-        n.insert(10);
+        n.insert(10, "10");
         assert_eq!(n.root.as_ref().unwrap().balance_factor(), 0);
-        n.insert(5);
+        n.insert(5, "5");
         assert_eq!(n.root.as_ref().unwrap().balance_factor(), -1);
-        n.insert(15);
+        n.insert(15, "15");
         assert_eq!(n.root.as_ref().unwrap().balance_factor(), 0);
-        n.insert(25);
+        n.insert(25, "25");
         assert_eq!(n.root.as_ref().unwrap().balance_factor(), 1);
+    }
+
+    #[test]
+    fn avl(){
+        let mut n = BST::new();
+        n.insert(1, "1");
+        n.insert(2, "2");
+        n.insert(3, "3");
+        n.insert(4, "4");
+        n.insert(5, "5");
+        let root = n.root.as_ref().unwrap();
+
+        assert_eq!(&root.height, &3);
+        assert_eq!(&root.key, &2);
+        assert_eq!(&root.left.as_ref().unwrap().key, &1);
+        assert_eq!(&root.right.as_ref().unwrap().key, &4)
     }
 }
