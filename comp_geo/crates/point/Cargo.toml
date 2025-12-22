@@ -1,0 +1,8 @@
+[package]
+name = "point"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+num-traits = "0.2.19"
