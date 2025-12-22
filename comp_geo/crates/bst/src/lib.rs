@@ -1,9 +1,9 @@
 use std::cmp::Ordering::{Greater, Less, Equal};
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct BST<T> {
-    /// Simple Binary Search Tree
-    /// No attempt at keeping it balanced
+    /// Simple Balanced AVL Binary Search Tree
     /// Supports:
     /// - insert
     /// - find 
@@ -14,21 +14,25 @@ pub struct BST<T> {
 #[derive(Debug)]
 struct BSTNode<T> {
     key: T,
+    height: u8,
     left: Option<Box<BSTNode<T>>>,
     right: Option<Box<BSTNode<T>>>,
 }
 
-impl<T: Ord> BST<T>{
+impl<T: Ord + Debug> BST<T>{
     pub fn new()  -> Self  {
         Self {
-            root: None
+            root: None,
         }
     }
 
     pub fn insert(&mut self, key: T) {
-        match self.root {
-            None => {self.root = Some(Box::new(BSTNode::new(key)))},
-            Some(ref mut node) => {node.insert(key);}
+        if let Some(node) = self.root.take() {
+            // We take the root, let it transform itself, 
+            // and catch whatever it returns.
+            self.root = Some(node.insert(key));
+        } else {
+            self.root = Some(Box::new(BSTNode::new(key)));
         }
     }
 
@@ -45,31 +49,106 @@ impl<T: Ord> BST<T>{
     }
 }
 
-impl<T: Ord> BSTNode<T> {
+impl<T: Ord + Debug> BSTNode<T> {
     fn new(key: T) -> Self{
         BSTNode {
             key,
+            height: 1,
             left: None,
             right: None
         }
     }
     
-    fn insert(&mut self, key: T) {
-        let target = match key.cmp(&self.key) {
-            Less            => &mut self.left,
-            Greater | Equal => &mut self.right
+    fn get_height(node: &Option<Box<BSTNode<T>>>) -> u8 {
+        node.as_ref().map_or(0, |n| n.height)
+    }
+
+    fn balance_factor(&self) -> i8 {
+        let h_left = Self::get_height(&self.left);
+        let h_right = Self::get_height(&self.right);
+        (h_right as i32 - h_left as i32) as i8
+    }
+    
+    fn rebalance(mut self: Box<Self>) -> Box<Self> {
+        self.update_height();
+        
+        let factor = self.balance_factor();
+        
+        if factor < -1 {
+            // Left is too heavy
+            if self.left.as_ref().map_or(0, |n| n.balance_factor()) > 0 {
+                let left_child = self.left.take().unwrap();
+                self.left = Some(left_child.rotate_left());
+            }
+            self.rotate_right()
+        } else if factor > 1 {
+            // Right is too heavy
+            if self.right.as_ref().map_or(0, |n| n.balance_factor()) < 0 {
+                let right_child = self.right.take().unwrap();
+                self.right = Some(right_child.rotate_right());
+            }
+            self.rotate_left()
+        } else {
+            self // No rotation needed
+        }
+    }
+
+    fn rotate_left(mut self: Box<Self>) -> Box<Self> {
+        // unhook right
+        let mut new_root = self.right.take().expect("Rotation needs child");
+        self.right = new_root.left.take();
+        // re-hook
+        new_root.left = Some(self);
+
+        // update heights
+        new_root.left.as_mut().unwrap().update_height();
+        new_root.update_height();
+
+        new_root
+    }
+
+    fn rotate_right(mut self: Box<Self>) -> Box<Self> {
+        let mut new_root = self.left.take().expect("Rotation needs child");
+        self.left = new_root.right.take();
+        new_root.right = Some(self);
+
+        new_root.right.as_mut().unwrap().update_height();
+        new_root.update_height();
+
+        new_root
+    }
+
+    fn update_height(&mut self) {
+        let h_left = Self::get_height(&self.left);
+        let h_right = Self::get_height(&self.right);
+        self.height = 1 + h_left.max(h_right);
+    }
+
+    fn insert(mut self: Box<Self>, key: T) -> Box<Self>{
+        match key.cmp(&self.key) {
+            Less => {
+                if let Some(left) = self.left.take() {
+                    self.left = Some(left.insert(key))
+                } else {
+                    self.left = Some(Box::new(BSTNode::new(key)));
+                }
+            }, 
+            Greater | Equal => {
+                if let Some(right) = self.right.take() {
+                    self.right = Some(right.insert(key));
+                } else {
+                    self.right = Some(Box::new(BSTNode::new(key)));
+                }
+            } 
         };
-        match target {
-            Some(node) => node.insert(key),
-            None       => *target = Some(Box::new(BSTNode::new(key)))
-        };
+        self.rebalance()
     }
 
     fn delete(mut self: Box<Self>, key: &T) -> Option<Box<Self>> {
         // Take and return
         // takes ownership of node and returns the node
         // that should replace it
-        match key.cmp(&self.key) {
+        let mut result = match key.cmp(&self.key) {
             Less => {
                 if let Some(left) = self.left.take() {
                     self.left = left.delete(key)
@@ -101,16 +180,20 @@ impl<T: Ord> BSTNode<T> {
                     }
                 }
             }
+        };
+        if let Some(ref mut node) = result {
+            node.update_height();
         }
+        result
     }
         
     fn extract_min(mut self: Box<Self>) -> (Box<Self>, Option<Box<Self>>) {
         if let Some(left) = self.left.take() {
             let (min_node, new_left) = left.extract_min();
             self.left = new_left;
+            self.update_height();
             (min_node, Some(self))
         } else  { 
-            // this is the min node
             let right_child = self.right.take();
             (self, right_child)
         }
@@ -195,5 +278,50 @@ mod tests {
         assert_eq!(root.key, 15);
         assert_eq!(root.left.as_ref().unwrap().key, 5);
         assert_eq!(root.right.as_ref().unwrap().key, 20);
+    }
+
+    #[test]
+    fn height_insert() {
+        let mut n = BST::new();
+        n.insert(10);
+
+        assert_eq!(&n.root.as_ref().unwrap().height, &1);
+        n.insert(5);
+        assert_eq!(&n.root.as_ref().unwrap().height, &2);
+
+        n.insert(2);
+        // rebalances
+        assert_eq!(&n.root.as_ref().unwrap().height, &2);
+        assert_eq!(&n.root.as_ref().unwrap().key, &5);
+       
+        n.insert(12);
+        assert_eq!(&n.root.as_ref().unwrap().height, &3);
+    }
+
+    #[test]
+    fn height_delete() {
+        let mut n = BST::new();
+        n.insert(10);
+        n.insert(5);
+        n.insert(15);
+        n.insert(14);
+        n.insert(11);
+        assert_eq!(&n.root.as_ref().unwrap().height, &3);
+        n.delete(&10);
+        assert_eq!(&n.root.as_ref().unwrap().height, &3);
+        assert_eq!(&n.root.as_ref().unwrap().key, &11);
+    }
+
+    #[test]
+    fn balance_factor() {
+        let mut n = BST::new();
+        n.insert(10);
+        assert_eq!(n.root.as_ref().unwrap().balance_factor(), 0);
+        n.insert(5);
+        assert_eq!(n.root.as_ref().unwrap().balance_factor(), -1);
+        n.insert(15);
+        assert_eq!(n.root.as_ref().unwrap().balance_factor(), 0);
+        n.insert(25);
+        assert_eq!(n.root.as_ref().unwrap().balance_factor(), 1);
     }
 }
