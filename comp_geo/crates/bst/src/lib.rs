@@ -217,6 +217,30 @@ impl<K: Ord + Debug, V> BSTNode<K, V> {
 mod tests {
     use super::*;
 
+    fn assert_avl_invariants<K: Ord + Debug, V>(node: &Option<Box<BSTNode<K, V>>>) {
+        if let Some(n) = node {
+            let h_l = BSTNode::get_height(&n.left);
+            let h_r = BSTNode::get_height(&n.right);
+            
+            // Height must be correctly updated
+            assert_eq!(n.height, 1 + h_l.max(h_r));
+            
+            // Balance factor must be within [-1, 1]
+            let diff = (h_r as i32 - h_l as i32).abs();
+            assert!(diff <= 1, "Balance factor at key {:?} is {}", n.key, diff);
+
+            assert_avl_invariants(&n.left);
+            assert_avl_invariants(&n.right);
+        }
+    }
+
+     #[test]
+    fn complexity_test() {
+        let mut n = BST::new();
+        for i in 0..100 { n.insert(i, "data"); }
+        assert_avl_invariants(&n.root); 
+    }
+
     #[test]
     fn new() {
         let mut n = BST::new();
@@ -277,7 +301,9 @@ mod tests {
         n.delete(&10);
         assert_eq!(n.find(&10), None);
         // should be the min child of right tree
-        assert_eq!(&n.root.unwrap().key, &11)
+        assert_eq!(n.root.as_ref().unwrap().key, 11);
+        
+        assert_avl_invariants(&n.root); 
     }
     #[test]
     fn delete_node_immediate_succesor() {
@@ -311,6 +337,7 @@ mod tests {
 
         n.insert(12, "12");
         assert_eq!(&n.root.as_ref().unwrap().height, &3);
+
     }
 
     #[test]
@@ -350,9 +377,24 @@ mod tests {
         n.insert(5, "5");
         let root = n.root.as_ref().unwrap();
 
-        assert_eq!(&root.height, &3);
+        assert_avl_invariants(&n.root); 
         assert_eq!(&root.key, &2);
         assert_eq!(&root.left.as_ref().unwrap().key, &1);
         assert_eq!(&root.right.as_ref().unwrap().key, &4)
+    }
+    #[test]
+    fn avl_reverse(){
+        let mut n = BST::new();
+        n.insert(5, "5");
+        n.insert(4, "4");
+        n.insert(3, "3");
+        n.insert(2, "2");
+        n.insert(1, "1");
+        let root = n.root.as_ref().unwrap();
+
+        assert_avl_invariants(&n.root); 
+        assert_eq!(&root.key, &4);
+        assert_eq!(&root.left.as_ref().unwrap().key, &2);
+        assert_eq!(&root.right.as_ref().unwrap().key, &5)
     }
 }
