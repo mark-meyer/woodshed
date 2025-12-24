@@ -20,13 +20,13 @@ struct BSTNode<K, V> {
     right: Option<Box<BSTNode<K, V>>>,
 }
 
-impl<K: Ord + Debug, V> Default for BST<K, V> {
+impl<K: Ord + Debug, V: Debug> Default for BST<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: Ord + Debug, V> BST<K, V> {
+impl<K: Ord + Debug, V: Debug> BST<K, V> {
     pub fn new() -> Self {
         Self { root: None }
     }
@@ -46,6 +46,13 @@ impl<K: Ord + Debug, V> BST<K, V> {
         self.root.as_ref().and_then(|n| n.find(key))
     }
 
+    pub fn neighbors(&self, key: &K) -> (Option<&V>, Option<&V>) {
+        match &self.root {
+            None => (None, None),
+            Some(root) => (root.predecessor(key), root.successor(key))
+        }
+    }
+
     pub fn delete(&mut self, key: &K) {
         if let Some(root_node) = self.root.take() {
             self.root = root_node.delete(key);
@@ -53,7 +60,7 @@ impl<K: Ord + Debug, V> BST<K, V> {
     }
 }
 
-impl<K: Ord + Debug, V> BSTNode<K, V> {
+impl<K: Ord + Debug, V: Debug> BSTNode<K, V> {
     fn new(key: K, value: V) -> Self {
         BSTNode {
             key,
@@ -64,6 +71,9 @@ impl<K: Ord + Debug, V> BSTNode<K, V> {
         }
     }
 
+    // AVL tree
+    // Invarient: for every node the balance factor is -1, 0, 1
+    // otherwise rebalance is necessary
     fn get_height(node: &Option<Box<Self>>) -> u8 {
         node.as_ref().map_or(0, |n| n.height)
     }
@@ -204,6 +214,46 @@ impl<K: Ord + Debug, V> BSTNode<K, V> {
         }
     }
 
+    fn min(&self) -> &V {
+        match &self.left {
+            Some(left) => left.min(),
+            None => &self.value,
+        }
+    }
+
+    fn max(&self) -> &V {
+        match &self.right {
+            Some(right) => right.max(),
+            None => &self.value
+        }
+    }
+
+    fn successor(&self, key: &K) -> Option<&V> {
+        // find the value immediately after key in sort order
+        // if key is less than any value, return the min
+        match key.cmp(&self.key) {
+            Equal => self.right.as_ref().map(|n| n.min()), 
+            Less => match &self.left{
+                Some(left) => left.successor(key).or(Some(&self.value)),
+                None => Some(&self.value)
+            },
+            Greater => self.right.as_ref().and_then(|right| right.successor(key)),
+        }
+    }
+
+    fn predecessor(&self, key: &K) -> Option<&V> {
+        // find the value immediately before key in sort order
+        // if key is greater than any value, return the max
+        match key.cmp(&self.key) {
+            Equal => self.left.as_ref().map(|n| n.max()), 
+            Greater => match &self.right{
+                Some(right) => right.predecessor(key).or(Some(&self.value)),
+                None => Some(&self.value)
+            },
+            Less => self.left.as_ref().and_then(|left| left.predecessor(key)),
+        }
+    }
+
     fn find(&self, key: &K) -> Option<&V> {
         match key.cmp(&self.key) {
             Less => self.left.as_ref()?.find(key),
@@ -217,7 +267,7 @@ impl<K: Ord + Debug, V> BSTNode<K, V> {
 mod tests {
     use super::*;
 
-    fn assert_avl_invariants<K: Ord + Debug, V>(node: &Option<Box<BSTNode<K, V>>>) {
+    fn assert_avl_invariants<K: Ord + Debug, V: Debug>(node: &Option<Box<BSTNode<K, V>>>) {
         if let Some(n) = node {
             let h_l = BSTNode::get_height(&n.left);
             let h_r = BSTNode::get_height(&n.right);
@@ -396,5 +446,60 @@ mod tests {
         assert_eq!(&root.key, &4);
         assert_eq!(&root.left.as_ref().unwrap().key, &2);
         assert_eq!(&root.right.as_ref().unwrap().key, &5)
+    }
+
+    #[test]
+    fn min_max() {
+        let mut n = BST::new();
+        n.insert(1, "1");
+        n.insert(2, "2");
+        n.insert(3, "3");
+        n.insert(4, "4");
+        n.insert(5, "5");
+        n.insert(5, "6");
+
+        let root = n.root.as_ref().unwrap();
+        assert_eq!(root.min(), &"1");
+        assert_eq!(root.max(), &"6");
+    }
+
+    #[test]
+    fn test_succesor() {
+        let mut n = BST::new();
+        n.insert(2, "2");
+        n.insert(1, "1");
+        n.insert(3, "3");
+        n.insert(4, "4");
+        n.insert(5, "5");
+        n.insert(6, "6");
+
+        let root = n.root.as_ref().unwrap();
+        // when the node isn't found return the min
+        assert_eq!(root.successor(&0), Some(&"1"));
+        assert_eq!(root.successor(&2), Some(&"3"));
+        assert_eq!(root.successor(&1), Some(&"2"));
+        assert_eq!(root.successor(&3), Some(&"4"));
+        assert_eq!(root.successor(&4), Some(&"5"));
+        assert_eq!(root.successor(&5), Some(&"6"));
+    }
+
+        #[test]
+    fn test_predecessor() {
+        let mut n = BST::new();
+        n.insert(2, "2");
+        n.insert(1, "1");
+        n.insert(3, "3");
+        n.insert(4, "4");
+        n.insert(5, "5");
+        n.insert(6, "6");
+
+        let root = n.root.as_ref().unwrap();
+        assert_eq!(root.predecessor(&2), Some(&"1"));
+        assert_eq!(root.predecessor(&3), Some(&"2"));
+        assert_eq!(root.predecessor(&4), Some(&"3"));
+        assert_eq!(root.predecessor(&5), Some(&"4"));
+        assert_eq!(root.predecessor(&6), Some(&"5"));
+        // when we fall off the max end, the max value is the predecessor
+        assert_eq!(root.predecessor(&700), Some(&"6"));
     }
 }
